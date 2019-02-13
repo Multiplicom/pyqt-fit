@@ -1,0 +1,30 @@
+version: 0.2
+
+env:
+  variables:
+    BUILD_BIOTOOL_NAME: pyqt_fitter
+
+phases:
+  pre_build:
+    commands:
+      - echo Getting AWS Account ID
+      - AWS_ACCOUNT_ID=`aws sts get-caller-identity --output text | awk '{ print $1; }'`
+      - echo Logging in to Amazon ECR...
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)
+      - BUILD_DOCKER_HOSTNAME=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - BUILD_CONTAINER_NAME="biotools/$BUILD_BIOTOOL_NAME"
+      - BUILD_CONTAINER_FQIN=$BUILD_DOCKER_HOSTNAME/$BUILD_CONTAINER_NAME
+      
+      # Takes the version from Git tag name, comes in form of Regex(refs/tags/.*) 
+      # from which the first part needs to be stripped for the Docker version tag.
+      - echo CODEBUILD_WEBHOOK_HEAD_REF=$CODEBUILD_WEBHOOK_HEAD_REF
+      - BUILD_CONTAINER_VERSION=v`echo $CODEBUILD_WEBHOOK_HEAD_REF | awk -F/ '{ print $3; }'`
+
+  build:
+    commands: 
+      - echo Pushing to **$BUILD_CONTAINER_FQIN:$BUILD_CONTAINER_VERSION**
+      - docker build --tag $BUILD_CONTAINER_FQIN:$BUILD_CONTAINER_VERSION .
+  
+  post_build:
+    commands:
+      - docker push $BUILD_CONTAINER_FQIN:$BUILD_CONTAINER_VERSION
